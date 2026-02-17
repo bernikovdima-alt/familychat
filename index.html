@@ -3,74 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Видеозвонок</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <title>Видеозвонок (Debug)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            background: #0f0f0f; 
-            font-family: sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            overflow: hidden; 
-        }
+        body { margin: 0; background: #000; font-family: sans-serif; height: 100vh; overflow: hidden; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         
-        /* Видео во весь экран */
-        #remote-video {
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
-            position: absolute; 
-            z-index: 1;
-        }
-
-        /* Мое маленькое видео */
-        #local-video {
-            position: absolute; 
-            bottom: 20px; 
-            right: 20px; 
-            width: 100px; 
-            height: 150px; 
-            background: #333; 
-            border-radius: 10px; 
-            border: 2px solid white; 
-            z-index: 2; 
-            object-fit: cover;
-        }
-
-        /* Кнопка и статус по центру */
-        .overlay {
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            z-index: 10; 
-            text-align: center;
-            width: 80%;
-        }
-
-        .btn {
-            background: #25D366; /* Цвет WhatsApp */
-            color: white; 
-            padding: 20px 40px; 
-            border: none; 
-            border-radius: 50px; 
-            font-size: 18px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: none; /* Скрыта по умолчанию */
-            width: 100%;
-        }
-
-        #status {
-            color: white; 
-            background: rgba(0,0,0,0.7); 
-            padding: 10px; 
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
+        video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        #local-video { width: 100px; height: 150px; bottom: 20px; right: 20px; position: absolute; z-index: 2; border: 2px solid white; border-radius: 10px; background: #222; }
+        
+        .ui-container { z-index: 10; position: absolute; text-align: center; width: 90%; max-width: 400px; background: rgba(0,0,0,0.6); padding: 20px; border-radius: 20px; backdrop-filter: blur(5px); }
+        
+        .btn { background: #25D366; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 30px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; display: none; }
+        
+        #error-log { color: #ff5555; font-size: 12px; margin-top: 15px; white-space: pre-wrap; text-align: left; background: rgba(0,0,0,0.5); padding: 5px; display: none; }
+        #status-text { font-size: 18px; margin-bottom: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -78,97 +24,136 @@
     <video id="remote-video" autoplay playsinline></video>
     <video id="local-video" autoplay muted playsinline></video>
 
-    <div class="overlay">
-        <div id="status">Запуск камеры...</div>
-        <button class="btn" id="share-btn" onclick="shareLink()">📞 Отправить ссылку маме</button>
+    <div class="ui-container">
+        <div id="status-text">Загрузка системы...</div>
+        <button id="call-btn" class="btn" onclick="shareLink()">📞 Позвонить маме</button>
+        <div id="error-log"></div>
     </div>
 
     <script>
-        let localStream;
-        let peer;
+        // --- Утилиты для вывода ошибок на экран ---
+        function logError(msg) {
+            const errDiv = document.getElementById('error-log');
+            errDiv.style.display = 'block';
+            errDiv.innerHTML += "⚠️ " + msg + "<br>";
+            console.error(msg);
+            document.getElementById('status-text').innerText = "Ошибка!";
+        }
 
-        // 1. Сразу запускаем камеру
-        async function start() {
+        function setStatus(msg) {
+            document.getElementById('status-text').innerText = msg;
+        }
+
+        // --- Глобальные переменные ---
+        let peer;
+        let localStream;
+
+        // 1. Старт
+        async function init() {
+            // Проверка, загрузилась ли библиотека
+            if (typeof Peer === 'undefined') {
+                logError("Библиотека PeerJS не загрузилась. Проверьте интернет или отключите AdBlock.");
+                return;
+            }
+
+            // Запуск камеры
             try {
+                setStatus("Включаем камеру...");
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "user" }, 
                     audio: true 
                 });
                 document.getElementById('local-video').srcObject = localStream;
-                document.getElementById('status').innerText = "Подключаемся к сети...";
-                initPeer();
             } catch (err) {
-                document.getElementById('status').innerText = "Ошибка камеры! Разрешите доступ.";
+                logError("Доступ к камере запрещен! Разрешите доступ в браузере.");
+                return;
             }
-        }
 
-        // 2. Подключаемся к PeerJS
-        function initPeer() {
-            peer = new Peer(null, {
-                debug: 2,
-                config: {
-                    'iceServers': [
-                        { url: 'stun:stun.l.google.com:19302' },
-                        { url: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
+            // Подключение к сети
+            setStatus("Соединение с сервером...");
+            
+            // Создаем Peer объект
+            try {
+                peer = new Peer({
+                    debug: 2,
+                    config: {
+                        iceServers: [
+                            { url: 'stun:stun.l.google.com:19302' },
+                            { url: 'stun:stun1.l.google.com:19302' }
+                        ]
+                    }
+                });
+            } catch (e) {
+                logError("Ошибка создания Peer: " + e);
+            }
 
+            // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
+
+            // Успешное подключение к серверу
             peer.on('open', (id) => {
-                // Проверяем, есть ли в ссылке ID того, кому звоним
+                console.log('My ID:', id);
+                
+                // Проверяем, звоним мы или ждем звонка
                 const urlParams = new URLSearchParams(window.location.search);
-                const callId = urlParams.get('call');
+                const targetId = urlParams.get('id');
 
-                if (callId) {
-                    // ЕСЛИ МЫ МАМА (прошли по ссылке) -> Звоним сразу
-                    document.getElementById('status').innerText = "Звоним...";
-                    const call = peer.call(callId, localStream);
+                if (targetId) {
+                    // МЫ - МАМА (Пришли по ссылке)
+                    setStatus("Звоним сыну...");
+                    const call = peer.call(targetId, localStream);
                     handleCall(call);
                 } else {
-                    // ЕСЛИ МЫ СОЗДАТЕЛЬ -> Ждем звонка
-                    document.getElementById('status').innerText = "Готово к звонку!";
-                    document.getElementById('share-btn').style.display = 'block';
+                    // МЫ - СЫН (Создаем комнату)
+                    setStatus("Готово! Жми кнопку.");
+                    const btn = document.getElementById('call-btn');
+                    btn.style.display = 'block';
                     
-                    // Формируем ссылку для отправки
-                    const currentUrl = window.location.href.split('?')[0];
-                    const link = `${currentUrl}?call=${id}`;
-                    
-                    document.getElementById('share-btn').onclick = () => {
+                    // Функция кнопки
+                    window.shareLink = () => {
+                        const link = window.location.href.split('?')[0] + '?id=' + id;
                         if (navigator.share) {
-                            navigator.share({ title: 'Звонок', url: link });
+                            navigator.share({ title: 'Видеочат', url: link });
                         } else {
-                            prompt("Скопируйте ссылку и отправьте:", link);
+                            prompt("Скопируйте ссылку:", link);
                         }
                     };
                 }
             });
 
-            // Когда нам звонят (ответ)
+            // Ошибки сети PeerJS
+            peer.on('error', (err) => {
+                let errorMsg = "Неизвестная ошибка";
+                if (err.type === 'browser-incompatible') errorMsg = "Браузер не поддерживает WebRTC";
+                if (err.type === 'disconnected') errorMsg = "Потеряно соединение с интернетом";
+                if (err.type === 'network') errorMsg = "Брандмауэр или роутер блокирует звонки";
+                if (err.type === 'unavailable-id') errorMsg = "Этот ID уже занят или неверен";
+                
+                logError(errorMsg + " (" + err.type + ")");
+            });
+
+            // Входящий звонок
             peer.on('call', (call) => {
-                if(confirm("Входящий звонок! Ответить?")) {
+                if (confirm("Входящий звонок! Ответить?")) {
+                    setStatus("Соединение установлено!");
                     call.answer(localStream);
                     handleCall(call);
                 }
             });
         }
 
-        // 3. Обработка соединения
+        // Логика самого звонка
         function handleCall(call) {
-            document.getElementById('status').innerText = "Соединение...";
-            document.getElementById('share-btn').style.display = 'none';
-            
             call.on('stream', (remoteStream) => {
-                document.getElementById('status').style.display = 'none'; // Скрываем надписи
-                const video = document.getElementById('remote-video');
-                video.srcObject = remoteStream;
-                video.play().catch(e => console.log(e));
+                document.getElementById('remote-video').srcObject = remoteStream;
+                document.querySelector('.ui-container').style.display = 'none'; // Скрываем меню при звонке
             });
-            
             call.on('close', () => alert("Звонок завершен"));
-            call.on('error', () => alert("Ошибка связи"));
+            call.on('error', (e) => logError("Ошибка потока: " + e));
         }
 
-        start();
+        // Запускаем
+        init();
+
     </script>
 </body>
 </html>
