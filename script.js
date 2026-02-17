@@ -1,13 +1,14 @@
 // --- НАСТРОЙКИ ---
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    // !!! ВСТАВЬТЕ СЮДА ДАННЫЕ ИЗ ШАГА 0 !!!
-    apiKey: "AIzaSy...",
-    authDomain: "...",
-    databaseURL: "https://familychat-76391-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "...",
-    storageBucket: "...",
-    messagingSenderId: "...",
-    appId: "..."
+  apiKey: "AIzaSyAKmjFw7f2KfJ-iJh-5Xzf-xXCaynjQFD4",
+  authDomain: "familychat-76391.firebaseapp.com",
+  databaseURL: "https://familychat-76391-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "familychat-76391",
+  storageBucket: "familychat-76391.firebasestorage.app",
+  messagingSenderId: "207829772753",
+  appId: "1:207829772753:web:f5d611ef2f0de87cc298f0",
+  measurementId: "G-H900FNHEKT"
 };
 
 // Инициализация
@@ -172,3 +173,4 @@ function addContact() {
     }
 
 }
+
