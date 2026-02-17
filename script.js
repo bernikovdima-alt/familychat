@@ -47,7 +47,17 @@ async function startCamera() {
 // 2. Настройка P2P и Базы Данных
 function initPeer() {
     // Создаем Peer. Если ID не указан, облако даст нам случайный
-    peer = new Peer();
+    // Внутри функции initPeer()
+peer = new Peer(null, {
+    debug: 2,
+    config: {
+        'iceServers': [
+            { url: 'stun:stun.l.google.com:19302' },
+            { url: 'stun:stun1.l.google.com:19302' },
+            { url: 'stun:stun2.l.google.com:19302' }
+        ]
+    }
+});
 
     peer.on('open', (id) => {
         document.getElementById('my-status').innerText = `Онлайн (Я: ${myName})`;
@@ -160,4 +170,5 @@ function addContact() {
         renderContacts();
         document.getElementById('new-contact').value = '';
     }
+
 }
