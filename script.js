@@ -105,22 +105,48 @@ function rejectCall() {
 
 // Позвонить кому-то
 function makeCall(targetName) {
-    // 1. Идем в базу и ищем ID контакта
-    database.ref('users/' + targetName).once('value').then((snapshot) => {
-        const data = snapshot.val();
-        
-        if (data && data.peerId) {
-            alert(`Звоним ${targetName}...`);
-            const call = peer.call(data.peerId, localStream);
-            currentCall = call;
-            
-            document.getElementById('hangup-btn').style.display = 'block';
-            call.on('stream', showRemoteVideo);
-            call.on('close', resetCallUI);
-        } else {
-            alert(`Пользователь ${targetName} сейчас не в сети (не открыл сайт).`);
-        }
-    });
+    console.log("Пытаюсь позвонить:", targetName);
+    
+    // Читаем базу данных
+    database.ref('users/' + targetName).once('value')
+        .then((snapshot) => {
+            const data = snapshot.val();
+            console.log("Данные абонента:", data);
+
+            if (data && data.peerId) {
+                // Проверяем, жив ли Peer
+                if (peer.disconnected) {
+                    peer.reconnect();
+                }
+
+                alert(`Звоним ${targetName}...`);
+                
+                // ЗВОНОК
+                const call = peer.call(data.peerId, localStream);
+                
+                // Ловим ошибки самого звонка
+                call.on('error', (err) => {
+                    console.error("Ошибка внутри звонка:", err);
+                    alert("Ошибка соединения: " + err);
+                });
+
+                currentCall = call;
+                document.getElementById('hangup-btn').style.display = 'block';
+                
+                call.on('stream', (remoteStream) => {
+                    console.log("Получен видеопоток!");
+                    showRemoteVideo(remoteStream);
+                });
+                
+                call.on('close', resetCallUI);
+            } else {
+                alert(`Пользователь ${targetName} не найден в сети. Проверьте имя.`);
+            }
+        })
+        .catch((error) => {
+            console.error("Ошибка чтения базы:", error);
+            alert("Ошибка базы данных");
+        });
 }
 
 // Завершить звонок
@@ -173,4 +199,5 @@ function addContact() {
     }
 
 }
+
 
