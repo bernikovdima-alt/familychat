@@ -3,83 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Семейный Чат</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <title>Видеозвонок</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --primary: #4a90e2; --bg: #f0f2f5; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { 
+            margin: 0; 
+            background: #0f0f0f; 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
         
-        /* Экран входа */
-        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 20px; text-align: center; }
-        input { padding: 15px; border-radius: 12px; border: 1px solid #ddd; width: 80%; font-size: 16px; margin-bottom: 10px; }
-        button { padding: 15px 30px; border-radius: 12px; border: none; background: var(--primary); color: white; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; }
-        
-        /* Главный экран */
-        #app-screen { display: none; height: 100%; flex-direction: column; }
-        
-        /* Видео контейнер */
-        .video-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        #remoteVideo { position: absolute; top: 0; left: 0; z-index: 1; }
-        #localVideo { position: absolute; bottom: 20px; right: 20px; width: 100px; height: 140px; border-radius: 12px; border: 2px solid white; z-index: 2; object-fit: cover; background: #333; }
-        
-        /* Панель управления */
-        .controls { padding: 20px; background: white; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
-        .status-bar { text-align: center; margin-bottom: 15px; color: #666; font-size: 14px; }
-        
-        /* Список контактов */
-        #contacts-list { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }
-        .contact-card { min-width: 80px; height: 80px; background: #eee; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; border: 2px solid transparent; }
-        .contact-card.online { border-color: #2ecc71; background: #e8f8f5; }
-        .contact-name { font-size: 12px; margin-top: 5px; font-weight: bold; }
+        /* Видео во весь экран */
+        #remote-video {
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            position: absolute; 
+            z-index: 1;
+        }
 
-        /* Всплывающее уведомление о звонке */
-        #incoming-call { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10; display: none; flex-direction: column; justify-content: center; align-items: center; color: white; }
-        .call-actions { display: flex; gap: 20px; margin-top: 30px; }
-        .btn-answer { background: #2ecc71; }
-        .btn-reject { background: #e74c3c; }
+        /* Мое маленькое видео */
+        #local-video {
+            position: absolute; 
+            bottom: 20px; 
+            right: 20px; 
+            width: 100px; 
+            height: 150px; 
+            background: #333; 
+            border-radius: 10px; 
+            border: 2px solid white; 
+            z-index: 2; 
+            object-fit: cover;
+        }
+
+        /* Кнопка и статус по центру */
+        .overlay {
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            z-index: 10; 
+            text-align: center;
+            width: 80%;
+        }
+
+        .btn {
+            background: #25D366; /* Цвет WhatsApp */
+            color: white; 
+            padding: 20px 40px; 
+            border: none; 
+            border-radius: 50px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: none; /* Скрыта по умолчанию */
+            width: 100%;
+        }
+
+        #status {
+            color: white; 
+            background: rgba(0,0,0,0.7); 
+            padding: 10px; 
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
-        <h2>Привет!</h2>
-        <p>Как тебя зовут?</p>
-        <input type="text" id="username-input" placeholder="Например: Сын">
-        <button onclick="login()">Войти</button>
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay muted playsinline></video>
+
+    <div class="overlay">
+        <div id="status">Запуск камеры...</div>
+        <button class="btn" id="share-btn" onclick="shareLink()">📞 Отправить ссылку маме</button>
     </div>
 
-    <div id="app-screen">
-        <div class="video-container">
-            <video id="remoteVideo" autoplay playsinline></video>
-            <video id="localVideo" autoplay muted playsinline></video>
-        </div>
+    <script>
+        let localStream;
+        let peer;
 
-        <div class="controls">
-            <div class="status-bar">Мой статус: <span id="my-status">Подключение...</span></div>
+        // 1. Сразу запускаем камеру
+        async function start() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: true 
+                });
+                document.getElementById('local-video').srcObject = localStream;
+                document.getElementById('status').innerText = "Подключаемся к сети...";
+                initPeer();
+            } catch (err) {
+                document.getElementById('status').innerText = "Ошибка камеры! Разрешите доступ.";
+            }
+        }
+
+        // 2. Подключаемся к PeerJS
+        function initPeer() {
+            peer = new Peer(null, {
+                debug: 2,
+                config: {
+                    'iceServers': [
+                        { url: 'stun:stun.l.google.com:19302' },
+                        { url: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+
+            peer.on('open', (id) => {
+                // Проверяем, есть ли в ссылке ID того, кому звоним
+                const urlParams = new URLSearchParams(window.location.search);
+                const callId = urlParams.get('call');
+
+                if (callId) {
+                    // ЕСЛИ МЫ МАМА (прошли по ссылке) -> Звоним сразу
+                    document.getElementById('status').innerText = "Звоним...";
+                    const call = peer.call(callId, localStream);
+                    handleCall(call);
+                } else {
+                    // ЕСЛИ МЫ СОЗДАТЕЛЬ -> Ждем звонка
+                    document.getElementById('status').innerText = "Готово к звонку!";
+                    document.getElementById('share-btn').style.display = 'block';
+                    
+                    // Формируем ссылку для отправки
+                    const currentUrl = window.location.href.split('?')[0];
+                    const link = `${currentUrl}?call=${id}`;
+                    
+                    document.getElementById('share-btn').onclick = () => {
+                        if (navigator.share) {
+                            navigator.share({ title: 'Звонок', url: link });
+                        } else {
+                            prompt("Скопируйте ссылку и отправьте:", link);
+                        }
+                    };
+                }
+            });
+
+            // Когда нам звонят (ответ)
+            peer.on('call', (call) => {
+                if(confirm("Входящий звонок! Ответить?")) {
+                    call.answer(localStream);
+                    handleCall(call);
+                }
+            });
+        }
+
+        // 3. Обработка соединения
+        function handleCall(call) {
+            document.getElementById('status').innerText = "Соединение...";
+            document.getElementById('share-btn').style.display = 'none';
             
-            <div style="margin-bottom: 10px; font-weight: bold;">Позвонить:</div>
-            <div id="contacts-list">
-                </div>
+            call.on('stream', (remoteStream) => {
+                document.getElementById('status').style.display = 'none'; // Скрываем надписи
+                const video = document.getElementById('remote-video');
+                video.srcObject = remoteStream;
+                video.play().catch(e => console.log(e));
+            });
             
-            <div style="margin-top: 15px;">
-                <input type="text" id="new-contact" placeholder="Имя контакта (как он ввел при входе)" style="width: 60%; display:inline-block;">
-                <button onclick="addContact()" style="width: 35%; display:inline-block; padding: 15px 5px;">+</button>
-            </div>
-            <button onclick="endCall()" style="background: #e74c3c; margin-top: 10px; display: none;" id="hangup-btn">Завершить звонок</button>
-        </div>
-    </div>
+            call.on('close', () => alert("Звонок завершен"));
+            call.on('error', () => alert("Ошибка связи"));
+        }
 
-    <div id="incoming-call">
-        <h2 id="caller-name">Вам звонят...</h2>
-        <div class="call-actions">
-            <button class="btn-answer" onclick="answerCall()">Ответить</button>
-            <button class="btn-reject" onclick="rejectCall()">Сбросить</button>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+        start();
+    </script>
 </body>
 </html>
