@@ -1,0 +1,163 @@
+// --- НАСТРОЙКИ ---
+const firebaseConfig = {
+    // !!! ВСТАВЬТЕ СЮДА ДАННЫЕ ИЗ ШАГА 0 !!!
+    apiKey: "AIzaSy...",
+    authDomain: "...",
+    databaseURL: "https://familychat-76391-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "...",
+    storageBucket: "...",
+    messagingSenderId: "...",
+    appId: "..."
+};
+
+// Инициализация
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+let myName = "";
+let localStream;
+let peer;
+let currentCall;
+let savedContacts = JSON.parse(localStorage.getItem('contacts')) || ['Мама', 'Сестра'];
+
+// --- ЛОГИКА ВХОДА ---
+function login() {
+    const input = document.getElementById('username-input').value.trim();
+    if (!input) return alert("Введите имя!");
+    
+    myName = input;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    
+    startCamera();
+    initPeer();
+    renderContacts();
+}
+
+// 1. Доступ к камере
+async function startCamera() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('localVideo').srcObject = localStream;
+    } catch (err) {
+        alert("Ошибка камеры: " + err);
+    }
+}
+
+// 2. Настройка P2P и Базы Данных
+function initPeer() {
+    // Создаем Peer. Если ID не указан, облако даст нам случайный
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+        document.getElementById('my-status').innerText = `Онлайн (Я: ${myName})`;
+        
+        // Сохраняем в базу: Имя -> PeerID. 
+        // Чтобы Мама знала, какой у меня сейчас технический ID.
+        database.ref('users/' + myName).set({
+            peerId: id,
+            status: 'online',
+            lastSeen: Date.now()
+        });
+
+        // При выходе удаляем статус (не работает на моб при закрытии вкладки, но полезно)
+        window.addEventListener('beforeunload', () => {
+            database.ref('users/' + myName).remove();
+        });
+    });
+
+    // Обработка ВХОДЯЩЕГО звонка
+    peer.on('call', (call) => {
+        currentCall = call;
+        document.getElementById('incoming-call').style.display = 'flex';
+        // Тут можно проиграть звук рингтона
+    });
+}
+
+// --- ЗВОНКИ ---
+
+// Ответить на звонок
+function answerCall() {
+    document.getElementById('incoming-call').style.display = 'none';
+    document.getElementById('hangup-btn').style.display = 'block';
+    
+    currentCall.answer(localStream);
+    currentCall.on('stream', showRemoteVideo);
+    currentCall.on('close', resetCallUI);
+}
+
+// Сбросить
+function rejectCall() {
+    if(currentCall) currentCall.close();
+    document.getElementById('incoming-call').style.display = 'none';
+}
+
+// Позвонить кому-то
+function makeCall(targetName) {
+    // 1. Идем в базу и ищем ID контакта
+    database.ref('users/' + targetName).once('value').then((snapshot) => {
+        const data = snapshot.val();
+        
+        if (data && data.peerId) {
+            alert(`Звоним ${targetName}...`);
+            const call = peer.call(data.peerId, localStream);
+            currentCall = call;
+            
+            document.getElementById('hangup-btn').style.display = 'block';
+            call.on('stream', showRemoteVideo);
+            call.on('close', resetCallUI);
+        } else {
+            alert(`Пользователь ${targetName} сейчас не в сети (не открыл сайт).`);
+        }
+    });
+}
+
+// Завершить звонок
+function endCall() {
+    if (currentCall) currentCall.close();
+    resetCallUI();
+}
+
+// Вспомогательные функции UI
+function showRemoteVideo(stream) {
+    document.getElementById('remoteVideo').srcObject = stream;
+}
+
+function resetCallUI() {
+    document.getElementById('remoteVideo').srcObject = null;
+    document.getElementById('hangup-btn').style.display = 'none';
+}
+
+// --- КОНТАКТЫ ---
+function renderContacts() {
+    const list = document.getElementById('contacts-list');
+    list.innerHTML = '';
+    
+    savedContacts.forEach(contactName => {
+        const div = document.createElement('div');
+        div.className = 'contact-card';
+        div.innerHTML = `<div>👤</div><div class="contact-name">${contactName}</div>`;
+        div.onclick = () => makeCall(contactName);
+        
+        // Проверяем в базе, онлайн ли контакт прямо сейчас
+        database.ref('users/' + contactName).on('value', (snap) => {
+            if(snap.exists()) {
+                div.classList.add('online');
+            } else {
+                div.classList.remove('online');
+            }
+        });
+        
+        list.appendChild(div);
+    });
+}
+
+function addContact() {
+    const name = document.getElementById('new-contact').value.trim();
+    if(name && !savedContacts.includes(name)) {
+        savedContacts.push(name);
+        localStorage.setItem('contacts', JSON.stringify(savedContacts));
+        renderContacts();
+        document.getElementById('new-contact').value = '';
+    }
+}
